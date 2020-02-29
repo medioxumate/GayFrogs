@@ -8,23 +8,29 @@
  *
  */
 
-//Session
-session_start();
-
 //turn on error reporting
 ini_set('display_errors', 1);
 error_reporting(E_ALL);
 
+
 //Require autoload file
 require_once('vendor/autoload.php');
 require('model/validation-functions.php');
+require('model/classes/membership.php');
+require('model/classes/premium.php');
+require('model/classes/Database.php');
+
+//Session
+session_start();
 
 //create an instance of the Base class/ fat free object
 //instantiate fat free
 $f3 = Base::instance();
 
+//Database
+$db = new Database();
+
 //turn on fatfree error reporting
-//debugging in fat free is difficult
 $f3->set('DEBUG', 3);
 
 //Interests arrays
@@ -54,14 +60,14 @@ $f3->set('em', '');
 
 //Define a default root
 $f3->route('GET /', function(){
-    //display a views
+    //display a view
     $view = new Template();
-    echo $view->render('views/greenbios.html');
+    echo $view->render('views/home.html');
 });
 
 //Form routes
 $f3->route('GET|POST /form', function($f3) {
-    //display a views
+    //display a view
     $template = new Template();
 
     //check if $POST even exists, then validate
@@ -71,15 +77,26 @@ $f3->route('GET|POST /form', function($f3) {
         //check valid strings and numbers
         if (validAge($_POST['age']) && validName($_POST['fn'])
             && validName($_POST['ln'])&& validPhone($_POST['ph'])) {
-
-            $_SESSION ['fn'] = $_POST['fn'];
-            $_SESSION ['ln'] = $_POST['ln'];
-            $_SESSION ['age'] = $_POST['age'];
-            $_SESSION ['ph'] = $_POST['ph'];
+            $fname = $_POST['fn'];
+            $lname = $_POST['ln'];
+            $age = $_POST['age'];
+            $phone = $_POST['ph'];
             if(isset($_POST['g'])){
-                $_SESSION ['g'] = $_POST['g'];
+                $gender = $_POST['g'];
             }
-
+            else{
+                $gender = 'indeterminate';
+            }
+            if(isset($_POST['member'])){
+                //membership class instantiation
+                $member = new premium($fname, $lname, $age, $gender,
+                    $phone, ' ', '', '', Array(), Array());
+                $_SESSION['member'] = $member;
+            }
+            else{
+                $_SESSION['member'] = new membership($fname, $lname, $age, $gender, $phone,
+                    '', '', '');
+            }
             $f3->reroute('/info');
         }
         else
@@ -111,16 +128,24 @@ $f3->route('GET|POST /info', function($f3) {
 
     //check if $POST even exists, then validate
     if (isset($_POST['em'])&&isset($_POST['st'])) {
+
         //check valid strings and numbers
         if (validEmail($_POST['em']) && validState($_POST['st'])) {
 
-            $_SESSION ['em'] = $_POST['em'];
-            $_SESSION ['st'] = $_POST['st'];
+            $_SESSION['member']->setEmail($_POST['em']);
+            $_SESSION['member']->setState($_POST['st']);
             if(isset($_POST['bio'])){
-                $_SESSION ['bio'] = $_POST['bio'];
+                $_SESSION['member']->setBio($_POST['bio']);
             }
-
-            $f3->reroute('/hobbies');
+            else{
+                $_SESSION['member']->setBio(' ');
+            }
+            if($_SESSION['member'] instanceof premium) {
+                $f3->reroute('/hobbies');
+            }
+            else{
+                $f3->reroute('/profile');
+            }
         }
         else
         {
@@ -136,25 +161,66 @@ $f3->route('GET|POST /info', function($f3) {
     echo $template->render('views/form2.html');
 });
 
-$f3->route('GET|POST /hobbies', function() {
-    //display a views
+$f3->route('GET|POST /hobbies', function($f3) {
+    //display a view
     $view = new Template();
 
+    if (!empty($_POST['in']) || !empty($_POST['out'])) {
+        if (isset($_POST['in'])) {
+            $_SESSION['member']->setIndoor($_POST['in']);
+        }
+        if (isset($_POST['out'])) {
+            $_SESSION['member']->setOutdoor($_POST['out']);
+        }
+        $f3->reroute('/profile');
+    }
     echo $view->render('views/form3.html');
 });
 
-$f3->route('GET|POST /profile', function(){
-    //display a views
+$f3->route('GET /profile', function(){
+    //display a view
     $view = new Template();
 
-    if (isset($_POST['in']) && !empty($_POST['in'])) {
-        $_SESSION['in'] = $_POST['in'];
+    $premium = $_SESSION['member'] instanceof premium;
+
+    $_SESSION['fn'] = $_SESSION['member']->getFname();
+    $_SESSION['ln'] = $_SESSION['member']->getLname();
+    $_SESSION['age'] = $_SESSION['member']->getAge();
+    $_SESSION['g'] = $_SESSION['member']->getGender();
+    $_SESSION['ph'] = $_SESSION['member']->getPhone();
+    $_SESSION['em'] = $_SESSION['member']->getEmail();
+    $_SESSION['st'] = $_SESSION['member']->getState();
+    $_SESSION['bio'] = $_SESSION['member']->getBio();
+
+    if($premium) {
+        $_SESSION['in'] = $_SESSION['member']->getIndoor();
+        $_SESSION['out'] = $_SESSION['member']->getOutdoor();
     }
-    if (isset($_POST['out']) && !empty($_POST['out'])) {
-        $_SESSION['out'] = $_POST['out'];
-    }
+
+    global $db;
+    $db->connect();
+    $db->insertMember($_SESSION['fn'], $_SESSION['ln'], $_SESSION['age'],
+        $_SESSION['g'], $_SESSION['ph'], $_SESSION['em'], $_SESSION['st'], $_SESSION['bio'],
+        $premium);
+    $id = $db->getMemberID($_SESSION['fn'], $_SESSION['ln'], $_SESSION['age'],
+        $_SESSION['g'], $_SESSION['ph'], $_SESSION['em'], $_SESSION['st'], $_SESSION['bio'],
+        $premium);
+
     echo $view->render('views/profile.html');
+});
+
+$f3->route('GET /users', function($f3){
+    //display a view
+    $view = new Template();
+
+    global $db;
+    $db->connect();
+
+    $f3->set('users', $db->getMembers());
+
+    echo $view->render('views/admin.html');
 });
 
 //run Fat-free
 $f3->run();
+session_destroy();
