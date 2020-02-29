@@ -8,7 +8,7 @@
  */
 
 //functions
-function validName($String){
+function validString($String){
     return ctype_alpha($String) AND ($String !="");
 }
 

@@ -1,0 +1,15 @@
+{
+  "name": "tokiehn/328/dating",
+  "authors": [
+  {
+    "name": "Brian Kiehn",
+    "email": "bkiehn@greenriver.mail.edu"
+  }
+  ],
+  "require": {
+    "bcosca/fatfree-core": "dev-master"
+  },
+  "autoload": {
+    "classmap": ["model/"]
+  }
+}
